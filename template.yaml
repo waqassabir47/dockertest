@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Metadata:
+  AWS::CloudFormation::Init:
+    config:
+      commands:
+        01_login_to_ecr:
+          command: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/z2d7x1g0
+        02_build_image:
+          command: docker build -t my-sam-ecr .
+        03_tag_image:
+          command: docker tag my-sam-ecr:latest public.ecr.aws/z2d7x1g0/my-sam-ecr:latest
+        04_push_image:
+          command: docker push public.ecr.aws/z2d7x1g0/my-sam-ecr:latest
+
+Resources:
+  MyECRRepository:
+    Type: AWS::ECR::Repository
+
+  MyECSCluster:
+    Type: AWS::ECS::Cluster
+
+  MyECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: test
+      NetworkMode: bridge
+      ContainerDefinitions:
+        - Name: my-samtest
+          Image: !Sub "${MyECRRepository.RepositoryUri}:latest"
+          PortMappings:
+            - ContainerPort: 5000
+          Memory: 512
+  MyECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref MyECSCluster
+      TaskDefinition: !Ref MyECSTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+
+Outputs:
+  MyECRRepositoryUri:
+    Value: !GetAtt MyECRRepository.RepositoryUri
+
